@@ -244,11 +244,39 @@ func (x *GoSNMP) GetMulti(oids []string) (*SnmpPacket, error) {
 	packet.ErrorIndex = 0
 	packet.RequestType = GetRequest
 	packet.Version = 1 // version 2
-	packet.Variables = make([]SnmpPDU, len(oids))
 
-	for i, oid := range oids {
-		packet.Variables[i] = SnmpPDU{Name: oid, Type: Null}
+	// process oids in groups of 5
+	step := 5
+	size := len(oids)
+	for i := 0; i < size; {
+		start := i
+		end := i + step
+		if len(oids) < end {
+			end = size
+		}
+		oidblock := oids[start:end]
+
+		mypacket := new(SnmpPacket)
+		mypacket.Community = packet.Community
+		mypacket.Error = packet.Error
+		mypacket.ErrorIndex = packet.ErrorIndex
+		mypacket.RequestType = packet.RequestType
+		mypacket.Version = packet.Version
+		mypacket.Variables = make([]SnmpPDU, len(oidblock))
+
+		for i, oid := range oidblock {
+			mypacket.Variables[i] = SnmpPDU{Name: oid, Type: Null}
+		}
+
+		res, err := x.sendPacket(mypacket)
+		if err != nil {
+			return nil, err
+		}
+		for _, variable := range res.Variables {
+			packet.Variables = append(packet.Variables, variable)
+		}
+		i = end
 	}
 
-	return x.sendPacket(packet)
+	return packet, nil
 }
